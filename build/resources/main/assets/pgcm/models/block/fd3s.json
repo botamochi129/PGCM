@@ -3,9 +3,7 @@
   "model": "pgcm:models/block/fd3s.obj",
   "flip_v": true,
   "textures": {
-    "#default": "pgcm:block/fd3s",
-    "#mat1": "pgcm:block/fd3s",
-    "#mat2": "pgcm:block/fd3s"
+    "#mat": "pgcm:block/fd3s"
   },
   "render_type": "translucent"
 }

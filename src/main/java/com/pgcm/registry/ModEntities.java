@@ -17,13 +17,9 @@ public class ModEntities {
     // 複数車種例
     public static final RegistryObject<EntityType<CarEntity>> FD3S =
             ENTITIES.register("fd3s", () -> EntityType.Builder.<CarEntity>of((type, level) -> new CarEntity(type, level, CarEntity.CarType.FD3S), MobCategory.MISC)
-                    .sized(1.5f, 1.5f)
+                    .sized(3.0f, 2.0f)
+                    .setShouldReceiveVelocityUpdates(true)
                     .build("fd3s"));
-
-    public static final RegistryObject<EntityType<CarEntity>> CAR2 =
-            ENTITIES.register("car2", () -> EntityType.Builder.<CarEntity>of((type, level) -> new CarEntity(type, level, CarEntity.CarType.CAR2), MobCategory.MISC)
-                    .sized(1.7f, 1.2f)
-                    .build("car2"));
 
     public static void register(IEventBus eventBus) {
         ENTITIES.register(eventBus);
