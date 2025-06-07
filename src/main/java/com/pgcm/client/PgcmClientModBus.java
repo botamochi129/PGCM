@@ -22,18 +22,34 @@ public class PgcmClientModBus {
     public static final KeyMapping KEY_HEADLIGHTS = new KeyMapping(
             "key.pgcm.headlights",
             InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_L,
-            "key.categories.vehicle"
+            GLFW.GLFW_KEY_I,
+            "key.categories.pgcm"
+    );
+
+    public static final KeyMapping LEFT_BLINKER = new KeyMapping(
+            "key.pgcm.left_blinker", // 表示名
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_LEFT,      // デフォルト: ←キー
+            "key.categories.pgcm"    // カテゴリ
+    );
+    public static final KeyMapping RIGHT_BLINKER = new KeyMapping(
+            "key.pgcm.right_blinker",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_RIGHT,     // デフォルト: →キー
+            "key.categories.pgcm"
     );
 
     @SubscribeEvent
     public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ModEntities.FD3S.get(), CarEntityRenderer::new);
+        event.registerEntityRenderer(ModEntities.FD3S_RACE.get(), CarEntityRenderer::new);
     }
 
     @SubscribeEvent
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(KEY_HEADLIGHTS);
+        event.register(LEFT_BLINKER);
+        event.register(RIGHT_BLINKER);
     }
 
     @Mod.EventBusSubscriber(modid = "pgcm", value = Dist.CLIENT)
@@ -48,6 +64,14 @@ public class PgcmClientModBus {
                             new HeadlightsPacket(car.getId(), !car.isHeadlightsOn())
                     );
                 }
+            }
+
+            // --- ウインカー処理を追加 ---
+            if (mc.player != null && mc.player.getVehicle() instanceof CarEntity car) {
+                // 左ウインカー
+                car.leftBlinkerOn = LEFT_BLINKER.isDown() && !RIGHT_BLINKER.isDown();
+                // 右ウインカー
+                car.rightBlinkerOn = RIGHT_BLINKER.isDown() && !LEFT_BLINKER.isDown();
             }
         }
     }

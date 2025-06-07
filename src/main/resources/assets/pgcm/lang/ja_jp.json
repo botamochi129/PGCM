@@ -1,0 +1,12 @@
+{
+  "entity.pgcm.fd3s": "RX-7 FD3S",
+  "key.pgcm.headlights": "ヘッドライト",
+  "key.categories.pgcm": "PGCM",
+  "pgcm.command.fuel_max.success": "燃料を満タンにしました！",
+  "pgcm.command.fuel_set.success": "燃料を%s%%に変更しました！",
+  "pgcm.command.tire_reset.success": "タイヤを新品にしました！",
+  "pgcm.command.tire_set.success": "タイヤ消耗を%s%%に変更しました！",
+  "pgcm.command.not_in_car": "車に乗ってください。",
+  "key.pgcm.left_blinker": "左ウインカー",
+  "key.pgcm.right_blinker": "右ウインカー"
+}

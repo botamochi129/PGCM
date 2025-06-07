@@ -1,8 +1,10 @@
 package com.pgcm.entity;
 
+import com.pgcm.client.PgcmClientModBus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -17,7 +19,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public class CarEntity extends Entity {
+public abstract class CarEntity extends Entity {
     Options options = Minecraft.getInstance().options;
 
     boolean forward = options.keyUp.isDown();
@@ -49,9 +51,12 @@ public class CarEntity extends Entity {
 
     private float previousYaw = 0.0f;
 
+    private float previousCarYaw = 0.0f;
     // 同期データ用
     private static final EntityDataAccessor<Float> DATA_Y_ROT = SynchedEntityData.defineId(CarEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> DATA_SPEED = SynchedEntityData.defineId(CarEntity.class, EntityDataSerializers.FLOAT);
+    public static final EntityDataAccessor<Float> DATA_FUEL =
+            SynchedEntityData.defineId(CarEntity.class, EntityDataSerializers.FLOAT);
 
     // クライアント側補間用
     private float clientYRot = 0f;
@@ -59,6 +64,39 @@ public class CarEntity extends Entity {
     public float clientXRot = 0f; // Pitch補間用
 
     private float rollAngle = 0f;
+
+    public static final EntityDataAccessor<Boolean> DATA_LEFT_BLINKER =
+            SynchedEntityData.defineId(CarEntity.class, EntityDataSerializers.BOOLEAN);
+    public static final EntityDataAccessor<Boolean> DATA_RIGHT_BLINKER =
+            SynchedEntityData.defineId(CarEntity.class, EntityDataSerializers.BOOLEAN);
+
+    public boolean leftBlinkerOn;
+    public boolean rightBlinkerOn;
+    public boolean brakeLampOn;
+    public boolean backLampOn;
+    public boolean tailLampOn;
+
+    // 点滅タイミング用
+    public int tickCount;
+
+    public float fuel = getInitialFuel(); // 初期燃料量
+    public boolean outOfFuel = false;
+
+    public abstract float getInitialFuel(); // サブクラスで初期値指定
+    protected abstract boolean isInfiniteFuel(); // サブクラスで無限燃料切り替え
+
+    //タイヤ関連
+    public float tireWear = 1.0f; // 1.0=新品, 0.0=摩耗
+    public boolean tireWornOut = false;
+    protected abstract boolean isTireConsumable();
+
+    public static final EntityDataAccessor<Float> DATA_TIRE_WEAR =
+            SynchedEntityData.defineId(CarEntity.class, EntityDataSerializers.FLOAT);
+
+    protected float getFuelConsumptionPerTick() {
+        // 15分(18000tick)で燃料0になるように
+        return getInitialFuel() / (15 * 60 * 20f); // 1tickあたり消費量
+    }
 
     private static final EntityDataAccessor<Boolean> DATA_HEADLIGHTS_ON =
             SynchedEntityData.defineId(CarEntity.class, EntityDataSerializers.BOOLEAN);
@@ -91,6 +129,10 @@ public class CarEntity extends Entity {
         this.entityData.define(DATA_Y_ROT, 0.0f);
         this.entityData.define(DATA_SPEED, 0.0f);
         this.entityData.define(DATA_HEADLIGHTS_ON, false);
+        this.entityData.define(DATA_FUEL, getInitialFuel());
+        this.entityData.define(DATA_TIRE_WEAR, 1.0f);
+        this.entityData.define(DATA_LEFT_BLINKER, false);
+        this.entityData.define(DATA_RIGHT_BLINKER, false);
     }
 
     public void setControlState(boolean f, boolean b, boolean l, boolean r, boolean drift) {
@@ -104,16 +146,50 @@ public class CarEntity extends Entity {
     private void updateSyncedData() {
         this.entityData.set(DATA_Y_ROT, this.getYRot());
         this.entityData.set(DATA_SPEED, (float) this.speed);
+        this.entityData.set(DATA_FUEL, fuel);
+        this.entityData.set(DATA_TIRE_WEAR, tireWear);
+        this.entityData.set(DATA_LEFT_BLINKER, leftBlinkerOn);
+        this.entityData.set(DATA_RIGHT_BLINKER, rightBlinkerOn);
+    }
+
+    public boolean isLeftBlinkerOn() {
+        return this.entityData.get(DATA_LEFT_BLINKER);
+    }
+    public boolean isRightBlinkerOn() {
+        return this.entityData.get(DATA_RIGHT_BLINKER);
     }
 
     @Override
     public void tick() {
         super.tick();
+        tickCount++;
 
         if (!level.isClientSide) {
+            // タイヤ消耗
+            if (isTireConsumable() && !tireWornOut) {
+                tireWear -= 1.0f / (30 * 60 * 20); // 30分で0
+                if (tireWear <= 0f) {
+                    tireWear = 0f;
+                    tireWornOut = true;
+                }
+            }
+
             simulatePhysics();
             calculateRollAngle();
             updateSyncedData();
+
+            // 燃料消費処理
+            if (!isInfiniteFuel() && !outOfFuel) {
+                // 実際に走行しているときだけ消費
+                if (Math.abs(speed) > 0.05) {
+                    fuel -= getFuelConsumptionPerTick();
+                    if (fuel <= 0) {
+                        fuel = 0;
+                        outOfFuel = true;
+                        this.speed = 0;
+                    }
+                }
+            }
 
             float yawRad = (float) Math.toRadians(getYRot());
             double dx = -Math.sin(yawRad) * speed;
@@ -134,6 +210,15 @@ public class CarEntity extends Entity {
 
             float pitch = calculatePitch();
             setRot(getYRot(), pitch);
+
+            // ブレーキランプ：バックキー or 減速時
+            this.brakeLampOn = this.back && this.speed > 0.1;
+
+            // バックランプ：バック走行時のみ
+            this.backLampOn = this.speed < -0.05;
+
+            // テールランプ：夜間やライトON時に点灯（ここではヘッドライトと連動例）
+            this.tailLampOn = this.isHeadlightsOn();
         } else {
             // 補間係数を0.25に強化
             clientYRot = lerpAngle(clientYRot, entityData.get(DATA_Y_ROT), 0.25f);
@@ -147,19 +232,24 @@ public class CarEntity extends Entity {
             setDeltaMovement(dx, getDeltaMovement().y, dz);
             move(MoverType.SELF, getDeltaMovement());
 
-            // カメラ追従も補間で滑らかに
-            boolean isControlledLocally = level.isClientSide && getFirstPassenger() == Minecraft.getInstance().player;
-            if (isControlledLocally) {
-                Minecraft mc = Minecraft.getInstance();
-                if (mc.player != null) {
-                    float deltaYaw = this.getYRot() - previousYaw;
-                    if (deltaYaw > 180) deltaYaw -= 360;
-                    if (deltaYaw < -180) deltaYaw += 360;
-                    // 補間で滑らかに追従
-                    mc.player.setYRot(lerp(mc.player.getYRot(), mc.player.getYRot() + deltaYaw, 0.25f));
-                    mc.player.setYHeadRot(lerp(mc.player.getYHeadRot(), mc.player.getYHeadRot() + deltaYaw, 0.25f));
+            if (getFirstPassenger() == Minecraft.getInstance().player) {
+                if (drift || tireWornOut || tireWear <= 0.0f || Math.abs(clientSpeed) > 1.5f) {
+                    spawnDriftParticle();
+                }
+
+                boolean newLeft = PgcmClientModBus.LEFT_BLINKER.isDown() && !PgcmClientModBus.RIGHT_BLINKER.isDown();
+                boolean newRight = PgcmClientModBus.RIGHT_BLINKER.isDown() && !PgcmClientModBus.LEFT_BLINKER.isDown();
+                if (leftBlinkerOn != newLeft) {
+                    leftBlinkerOn = newLeft;
+                }
+                if (rightBlinkerOn != newRight) {
+                    rightBlinkerOn = newRight;
                 }
             }
+
+            this.brakeLampOn = this.back && this.clientSpeed > 0.1f;
+            this.backLampOn = this.clientSpeed < -0.05f;
+            this.tailLampOn = this.isHeadlightsOn();
         }
 
         // 乗車処理（元コードのまま）
@@ -187,6 +277,47 @@ public class CarEntity extends Entity {
             right = options.keyRight.isDown();
             drift = options.keyJump.isDown();
         }
+
+        if (level.isClientSide && getFirstPassenger() == Minecraft.getInstance().player) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                float currentCarYaw = this.getYRot();
+                float deltaYaw = currentCarYaw - previousCarYaw;
+                // -180～180度補正
+                if (deltaYaw > 180) deltaYaw -= 360;
+                if (deltaYaw < -180) deltaYaw += 360;
+
+                // プレイヤーの現視点に車の回転差分を加算
+                mc.player.setYRot(mc.player.getYRot() + deltaYaw);
+                mc.player.setYHeadRot(mc.player.getYHeadRot() + deltaYaw);
+                // 必要ならピッチも同様に
+            }
+            previousCarYaw = this.getYRot();
+        }
+    }
+
+    private void spawnDriftParticle() {
+        if (!level.isClientSide) return;
+        // タイヤ位置を計算（例: 車の中心から左右にオフセット）
+        double yawRad = Math.toRadians(getYRot());
+        double offsetX = Math.cos(yawRad) * 1.1;
+        double offsetZ = Math.sin(yawRad) * 1.1;
+        // 左タイヤ
+        level.addParticle(
+                ParticleTypes.LARGE_SMOKE, // 煙パーティクル
+                getX() + offsetX,
+                getY() + 0.2,
+                getZ() + offsetZ,
+                0, 0.05, 0
+        );
+        // 右タイヤ
+        level.addParticle(
+                ParticleTypes.LARGE_SMOKE,
+                getX() - offsetX,
+                getY() + 0.2,
+                getZ() - offsetZ,
+                0, 0.05, 0
+        );
     }
 
     // 新規追加：坂のピッチ（前後傾き）計算
@@ -259,6 +390,16 @@ public class CarEntity extends Entity {
     }
 
     private void simulatePhysics() {
+        if (outOfFuel) {
+            speed *= 0.999;
+            return;
+        }
+
+        double effectiveAcceleration = ACCELERATION;
+        if (tireWornOut || tireWear <= 0.0f) {
+            effectiveAcceleration *= 0.5; // 完全摩耗で加速半減
+        }
+
         double slopeFactor = 1.0;
         if (this.onGround) {
             double blockBelowY = Math.floor(this.getY()) - 1;
@@ -267,14 +408,19 @@ public class CarEntity extends Entity {
             slopeFactor = Math.max(0.5, Math.min(1.0, slopeFactor));
         }
 
-        // アクセル・ブレーキ・惰性
+        // --- タイヤ摩耗によるグリップ補正 ---
+        float grip = 0.5f + 0.5f * tireWear;
+        boolean isWorn = (tireWornOut || tireWear <= 0.0f);
+        if (isWorn) grip = 0.15f;
+
+        // アクセル・ブレーキ・惰性（加速・最高速はgripを掛けない）
         if (forward) {
             if (speed < 0) {
                 speed += BRAKE_DECELERATION * slopeFactor;
                 if (speed > 0) speed = 0;
             } else {
                 double accelFactor = 1.0 - (speed / MAX_SPEED);
-                speed += ACCELERATION * Math.max(0.2, accelFactor) * slopeFactor;
+                speed += effectiveAcceleration * Math.max(0.2, accelFactor) * slopeFactor;
                 if (speed > MAX_SPEED) speed = MAX_SPEED;
             }
         } else if (back) {
@@ -287,37 +433,43 @@ public class CarEntity extends Entity {
                 if (speed < MAX_REVERSE) speed = MAX_REVERSE;
             }
         } else {
-            speed *= DRAG;
+            speed *= DRAG * (isWorn ? 0.98 : 1.0);
             if (Math.abs(speed) < 0.01) speed = 0;
         }
 
         // --- 曲がりやすさの調整 ---
-        // 速度が遅いほどよく曲がる（低速クイック、高速安定）
         float absSpeed = (float)Math.abs(speed);
         float rotateSpeed;
-        if (drift) {
-            rotateSpeed = DRIFT_ROTATE; // ドリフト時はさらにクイック
+        if (drift || isWorn) {
+            rotateSpeed = DRIFT_ROTATE * 1.7f;
         } else if (absSpeed < 0.5f) {
-            rotateSpeed = LOW_SPEED_ROTATE;
+            rotateSpeed = LOW_SPEED_ROTATE * grip;
         } else if (absSpeed > 1.8f) {
-            rotateSpeed = HIGH_SPEED_ROTATE;
+            rotateSpeed = HIGH_SPEED_ROTATE * grip;
         } else {
-            // 線形補間で滑らかに変化
             float t = (absSpeed - 0.5f) / (1.8f - 0.5f);
-            rotateSpeed = LOW_SPEED_ROTATE * (1.0f - t) + HIGH_SPEED_ROTATE * t;
+            rotateSpeed = (LOW_SPEED_ROTATE * (1.0f - t) + HIGH_SPEED_ROTATE * t) * grip;
         }
 
-        // アクセルON時はアンダー傾向（やや曲がりにくく）、ブレーキ時はオーバー傾向（曲がりやすく）
         if (forward && !back) {
-            rotateSpeed *= 0.85f; // アクセルON時はやや鈍く
+            rotateSpeed *= 0.85f;
         } else if (back && !forward) {
-            rotateSpeed *= 1.15f; // ブレーキ時は鋭く
+            rotateSpeed *= 1.15f;
         }
 
-        // RX-7 FD3Sらしい「シャープなハンドリング」を再現
         if (speed != 0) {
-            if (left) setYRot(getYRot() - (speed > 0 ? rotateSpeed : -rotateSpeed));
-            if (right) setYRot(getYRot() + (speed > 0 ? rotateSpeed : -rotateSpeed));
+            float yawChange = (speed > 0 ? rotateSpeed : -rotateSpeed);
+            if (left) setYRot(getYRot() - yawChange);
+            if (right) setYRot(getYRot() + yawChange);
+
+            // タイヤ完全摩耗時は横滑りを強調
+            if (isWorn) {
+                double slip = 0.25 * absSpeed;
+                double yawRad = Math.toRadians(getYRot());
+                double slipX = Math.cos(yawRad) * slip;
+                double slipZ = Math.sin(yawRad) * slip;
+                setDeltaMovement(getDeltaMovement().x + slipX, getDeltaMovement().y, getDeltaMovement().z + slipZ);
+            }
         }
     }
 

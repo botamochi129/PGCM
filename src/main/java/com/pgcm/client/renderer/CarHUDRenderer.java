@@ -76,6 +76,45 @@ public class CarHUDRenderer {
         int speedTextX = centerX - speedTextWidth / 2;
         int speedTextY = zoneTop + zoneHeight - 25;
         mc.font.drawShadow(poseStack, speedText, speedTextX, speedTextY, 0xFFFFFFFF);
+
+        // --- ガスメーター描画 ---
+        // 速度計の下に横棒ゲージを表示
+        float percent = car.getEntityData().get(CarEntity.DATA_FUEL) / car.getInitialFuel();
+        //System.out.println("Fuel percentage: " + percent + " (" + car.fuel + "/" + car.getInitialFuel() + ")");
+        percent = Mth.clamp(percent, 0f, 1f);
+
+        int barWidth = 90;
+        int barHeight = 10;
+        int barX = centerX - barWidth / 2 - 125;
+        int barY = zoneTop + zoneHeight - 45; // 速度表示のちょい上
+
+        // 枠
+        GuiComponent.fill(poseStack, barX - 1, barY - 1, barX + barWidth + 1, barY + barHeight + 1, 0xFF333333);
+        // ゲージ
+        int fuelColor = percent > 0.2f ? 0xFF00FF00 : 0xFFFF4444; // 20%以下で赤
+        GuiComponent.fill(poseStack, barX, barY, barX + (int)(barWidth * percent), barY + barHeight, fuelColor);
+
+        // ラベル
+        String fuelLabel = "FUEL";
+        mc.font.drawShadow(poseStack, fuelLabel, barX - 35, barY, 0xFFFFFFFF);
+
+        // パーセント表示
+        String fuelPct = String.format("%d%%", (int)(percent * 100));
+        mc.font.drawShadow(poseStack, fuelPct, barX + barWidth + 8, barY, 0xFFFFFFFF);
+
+        // --- タイヤメーター描画 ---
+        float tireWear = car.getEntityData().get(CarEntity.DATA_TIRE_WEAR);
+        int tireBarWidth = 90;
+        int tireBarHeight = 10;
+        int tireBarX = centerX - tireBarWidth / 2 + 125;
+        int tireBarY = zoneTop + zoneHeight - 45;
+
+        GuiComponent.fill(poseStack, tireBarX - 1, tireBarY - 1, tireBarX + tireBarWidth + 1, tireBarY + tireBarHeight + 1, 0xFF333333);
+        int tireColor = tireWear > 0.2f ? 0xFF00AAFF : 0xFFFF4444;
+        GuiComponent.fill(poseStack, tireBarX, tireBarY, tireBarX + (int)(tireBarWidth * tireWear), tireBarY + tireBarHeight, tireColor);
+        mc.font.drawShadow(poseStack, "TIRE", tireBarX - 35, tireBarY, 0xFFFFFFFF);
+        String tirePct = String.format("%d%%", (int)(tireWear * 100));
+        mc.font.drawShadow(poseStack, tirePct, tireBarX + tireBarWidth + 8, tireBarY, 0xFFFFFFFF);
     }
 
     private static void drawFilledTriangle(PoseStack poseStack, float x1, float y1, float x2, float y2, float x3, float y3, int color) {
