@@ -26,11 +26,13 @@ public class CarEntityRenderer extends EntityRenderer<CarEntity> {
     public void render(CarEntity entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
         poseStack.pushPose();
 
-        // Yaw回転
-        poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-entityYaw + 90));
-        // Pitch回転（前後傾き）を追加
+        //Yaw
+        float smoothYaw = entity.clientYRot;
+        poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-smoothYaw + 90));
+        // Pitch回転（前後傾き）もsmoothed値で
         float pitch = entity.level.isClientSide ? entity.clientXRot : entity.getXRot();
         poseStack.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(-pitch));
+
         // Roll回転
         poseStack.mulPose(Axis.XP.rotationDegrees(entity.getRollAngle()));
 

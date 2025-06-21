@@ -8,5 +8,9 @@
   "pgcm.command.tire_set.success": "タイヤ消耗を%s%%に変更しました！",
   "pgcm.command.not_in_car": "車に乗ってください。",
   "key.pgcm.left_blinker": "左ウインカー",
-  "key.pgcm.right_blinker": "右ウインカー"
+  "key.pgcm.right_blinker": "右ウインカー",
+  "itemGroup.pgcm_tab": "PGCM",
+  "item.pgcm.fd3s_summon": "RX-7 FD3S(レース用)",
+  "item.pgcm.fd3s_infinite_summon": "RX-7 FD3S",
+    "item.pgcm.car_remover": "車削除ツール"
 }

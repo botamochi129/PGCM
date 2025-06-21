@@ -8,5 +8,9 @@
   "pgcm.command.tire_set.success": "Tire wear set to %s%%!",
   "pgcm.command.not_in_car": "Please ride a car.",
   "key.pgcm.left_blinker": "Left Blinker",
-  "key.pgcm.right_blinker": "Right Blinker"
+  "key.pgcm.right_blinker": "Right Blinker",
+  "itemGroup.pgcm_tab": "PGCM",
+  "item.pgcm.fd3s_summon": "RX-7 FD3S(Race Version)",
+  "item.pgcm.fd3s_infinite_summon": "RX-7 FD3S",
+  "item.pgcm.car_remover": "Car Remover"
 }
